@@ -2,9 +2,9 @@
 
 This covers M0 (one test call), M1 (building the human dataset) and M2 (the 200-mirror pilot).
 Expected spend is **about $0.20** of your HF credits, and the ledger hard-stops at $18.
-You don't need git or a GPU, and these steps don't install PyTorch.
+You don't need a GPU, and these steps don't install PyTorch.
 
-**What you need:** Python 3.10 or newer, about 2 GB of free disk and RAM, and a Hugging Face token.
+**What you need:** Python 3.10 or newer, git, about 2 GB of free disk and RAM, and a Hugging Face token.
 
 ## 1. Get a Hugging Face token
 
@@ -12,9 +12,12 @@ Go to https://huggingface.co/settings/tokens and choose **Create new token**, th
 Tick **"Make calls to Inference Providers"**. For the later `telltale data push`, also tick write access
 to your repos. Copy the token, which starts with `hf_`.
 
-## 2. Unzip and install
+## 2. Clone and install
 
-Download `telltale.zip` from the project files and unzip it. You'll get a folder called `telltale/`.
+```bash
+git clone https://github.com/sivaratrisrinivas/telltale.git
+```
+(No git? Download `telltale.zip` from the project files and unzip it instead. You get the same `telltale/` folder.)
 
 **macOS / Linux**
 ```bash

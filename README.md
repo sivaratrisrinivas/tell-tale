@@ -31,8 +31,13 @@ pre-2022 GitHub text ─► topic (gpt-oss-20b) ─► mirrors from 10 families 
 
 ## Setup
 
+Step-by-step for the paid pilot (M0-M2): see **[PILOT_GUIDE.md](PILOT_GUIDE.md)**.
+
 ```bash
-pip install -e ".[dev,space]"
+git clone https://github.com/sivaratrisrinivas/telltale.git && cd telltale
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .              # data + mirror generation only (M0-M3), no torch
+pip install -e ".[dev,space]" # + training, ONNX, tests, Space
 export HF_TOKEN=hf_...        # fine-grained token with "Make calls to Inference Providers" (+ write for pushes)
 pytest -q                     # offline: unit tests + an end-to-end CPU smoke test with a fake LLM
 ```
