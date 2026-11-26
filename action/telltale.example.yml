@@ -1,0 +1,6 @@
+# Optional: .github/telltale.yml in the base repo. All keys optional.
+threshold: null            # null = calibrated threshold shipped with the model (target 1% FPR)
+min_words: 30
+label: "telltale: possibly machine-written"
+comment: true
+exempt_users: []           # logins that are never scored

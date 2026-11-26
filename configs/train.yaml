@@ -1,0 +1,13 @@
+base_model: answerdotai/ModernBERT-base   # use jhu-clsp/mmBERT-small for multilingual
+max_length: 1024
+lr: 3.0e-5
+warmup_ratio: 0.06
+weight_decay: 0.01
+per_device_batch_size: 16
+grad_accum: 2                # effective batch 32
+epochs: 3
+fp16: true                   # T4 has no bf16
+seed: 13
+family_loss_weight: 0.3      # total = CE_A + 0.3 * CE_B (CE_B on machine rows only)
+eval_every_epochs: 0.5
+target_fpr: 0.01             # threshold chosen on calibrated validation scores

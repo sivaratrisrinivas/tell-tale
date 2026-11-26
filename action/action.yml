@@ -1,0 +1,49 @@
+name: Telltale
+description: Labels PRs and issues whose description looks fully machine-written. Labels and comments only; never closes, locks or blocks.
+branding: {icon: search, color: purple}
+inputs:
+  github-token:
+    description: Token with issues:write and pull-requests:write (the default GITHUB_TOKEN works).
+    default: ${{ github.token }}
+  model-repo:
+    description: Hugging Face model repo holding onnx/model.int8.onnx
+    default: Srini410/telltale
+  model-revision:
+    description: Model revision (branch, tag or commit) — also the cache key
+    default: main
+  hf-token:
+    description: Only needed if the model repo is private
+    default: ""
+  config-path:
+    description: Path of the config file in the base repo
+    default: .github/telltale.yml
+outputs:
+  status: {description: "scored | skipped", value: "${{ steps.run.outputs.status }}"}
+  p_machine: {description: Probability the description is fully machine-written, value: "${{ steps.run.outputs.p_machine }}"}
+  flagged: {description: "true | false", value: "${{ steps.run.outputs.flagged }}"}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        cache: pip
+        cache-dependency-path: ${{ github.action_path }}/requirements.txt
+    - name: Cache model
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/telltale
+        key: telltale-${{ inputs.model-repo }}-${{ inputs.model-revision }}
+    - name: Install
+      shell: bash
+      run: pip install --quiet -r "${{ github.action_path }}/requirements.txt"
+    - name: Score
+      id: run
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        HF_TOKEN: ${{ inputs.hf-token }}
+        TELLTALE_MODEL_REPO: ${{ inputs.model-repo }}
+        TELLTALE_MODEL_REVISION: ${{ inputs.model-revision }}
+        TELLTALE_CONFIG: ${{ inputs.config-path }}
+      run: python "${{ github.action_path }}/entrypoint.py"

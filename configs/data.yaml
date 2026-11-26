@@ -1,0 +1,30 @@
+source_dataset: open-index/open-github-issues
+repos: [golang/go, python/cpython, rust-lang/rust, swiftlang/swift, vuejs/core, mdn/content]
+heldout_repo: vuejs/core
+cutoff: "2022-01-01"          # human-by-construction: created before this date
+min_body_words: 30
+max_tokens: 1024
+minhash: {num_perm: 128, threshold: 0.8, shingle: 5}
+seed: 13
+sizes:
+  core: 10000                 # human items that get one mirror each (split 80/10/10)
+  pool: 100000                # hard-negative pool: scored, never mirrored up front
+  heldout_repo: 500           # vuejs/core items for T4 (each gets one mirror)
+  polished: 500               # held-out human items for T5 (AI-polished)
+  mistral_mirrors: 800        # T3 mirrors, written for core-test items
+bot_patterns:
+  - '\[bot\]$'
+  - '^dependabot'
+  - '^renovate'
+  - '^github-actions'
+  - '^robot-'
+  - 'bot$'
+  - '^mdn-bot'
+  - '^rust-highfive'
+  - '^rustbot'
+  - '^bors'
+  - '^miss-islington'
+  - '^bedevere'
+  - '^gopherbot'
+  - '^swift-ci'
+  - '^copilot'

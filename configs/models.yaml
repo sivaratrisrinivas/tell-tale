@@ -1,0 +1,99 @@
+# Model roster. Order of the enabled+license_ok `mirror` entries defines Head B's label ids.
+#
+# License review done 26 Nov 2026 by reading each repo's LICENSE on the Hub
+# (spec rule: "confirm its license allows training on its outputs; drop it if not").
+#   MIT / Apache-2.0 ............ deepseek, glm, gemma, gpt-oss, qwen, inkling  -> OK
+#   OpenMDW-1.1 (nvidia) ........ explicitly no restriction on outputs        -> OK
+#   Tencent Hy 1.0 .............. Apache-derived, only a MaaS clause           -> OK
+#   Kimi K3 ..................... MIT-like, MaaS / large-MAU clauses only      -> OK
+#   Mistral Ecosystem ........... MIT-like, MaaS clause; held-out test only    -> OK
+#   MiniMax Community ........... grant is non-commercial; silent on outputs.  -> OK for a free,
+#                                 non-commercial detector. Re-check if Telltale is ever sold.
+#   Llama 3.3 ................... allows training on outputs BUT any model trained on them
+#                                 must be named "Llama..." -> DISABLED by default.
+#                                 Set enabled: true only if you accept that naming rule.
+#
+# Reasoning control: gpt-oss takes reasoning_effort; others get chat_template_kwargs to turn
+# thinking off. The M2 pilot logs real reasoning-token usage so you can verify these work.
+models:
+  topic:
+    model: openai/gpt-oss-20b
+    role: topic
+    license: apache-2.0
+    license_ok: true
+    reasoning_effort: low
+
+  deepseek:
+    model: deepseek-ai/DeepSeek-V4.1-Flash
+    role: mirror
+    license: mit
+    license_ok: true
+    extra_body: {chat_template_kwargs: {thinking: false}}
+  glm:
+    model: zai-org/GLM-5.3-Flash
+    role: mirror
+    license: mit
+    license_ok: true
+    extra_body: {chat_template_kwargs: {enable_thinking: false}}
+  gemma:
+    model: google/gemma-4-26B-A4B-it
+    role: mirror
+    license: apache-2.0
+    license_ok: true
+  gpt-oss:
+    model: openai/gpt-oss-120b
+    role: mirror
+    license: apache-2.0
+    license_ok: true
+    reasoning_effort: low
+  minimax:
+    model: MiniMaxAI/MiniMax-M3.1-Flash
+    role: mirror
+    license: minimax-community
+    license_ok: true
+    license_note: Non-commercial grant; outputs not restricted. Fine for a free detector.
+  qwen:
+    model: Qwen/Qwen3.8-27B
+    role: mirror
+    license: apache-2.0
+    license_ok: true
+    extra_body: {chat_template_kwargs: {enable_thinking: false}}
+  inkling:
+    model: thinkingmachines/Inkling-2-Mini
+    role: mirror
+    license: apache-2.0
+    license_ok: true
+  nemotron:
+    model: nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16
+    role: mirror
+    license: openmdw-1.1
+    license_ok: true
+    extra_body: {chat_template_kwargs: {enable_thinking: false}}
+  llama:
+    model: meta-llama/Llama-3.3-70B-Instruct
+    role: mirror
+    enabled: false
+    license: llama3.3
+    license_ok: true
+    license_note: Models trained on Llama outputs must carry "Llama" at the start of their name.
+  hy4:
+    model: tencent/Hy4-flash
+    role: mirror
+    license: tencent-hy-1.0
+    license_ok: true
+  kimi:
+    model: moonshotai/Kimi-K3
+    role: mirror
+    license: kimi-k3
+    license_ok: true
+    quota: 300            # expensive: hard cap on v0 mirrors
+    extra_body: {chat_template_kwargs: {thinking: false}}
+
+  mistral:
+    model: mistralai/Mistral-Large-4-1T-A52B
+    role: heldout          # NEVER used for training (T3 unseen-model test)
+    license: mistral-ecosystem
+    license_ok: true
+
+# Models used for the AI-polished (T5) test set. Never used for training.
+polishers: [gpt-oss, gemma, deepseek]

@@ -1,0 +1,6 @@
+runs/
+__pycache__/
+*.egg-info/
+.venv/
+*.onnx
+.pytest_cache/

@@ -1,0 +1,18 @@
+# Hard budget: $20 of HF credits. The ledger halts every paid call once spend passes `cap_usd`.
+cap_usd: 18.0
+ledger_path: runs/ledger.jsonl
+cache_dir: runs/cache
+concurrency: 8
+max_retries: 6
+# Bill an organization instead of your personal account (sends X-HF-Bill-To). Leave null for personal.
+bill_to: null
+max_tokens:
+  topic: 300
+  mirror: 900
+  polish: 1200
+# Rough per-call token guesses, used only by `telltale mirrors estimate` before spending.
+estimate:
+  topic_in: 450
+  topic_out: 120     # includes low reasoning
+  mirror_in: 180
+  mirror_out: 450    # includes some reasoning overhead

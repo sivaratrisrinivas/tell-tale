@@ -1,0 +1,21 @@
+# Copy to .github/workflows/telltale.yml in the repo you want to triage.
+# pull_request_target runs in the BASE repo context; Telltale never checks out PR code,
+# it only reads the title and body from the event payload.
+name: Telltale
+on:
+  pull_request_target:
+    types: [opened, edited]
+  issues:
+    types: [opened, edited]
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+jobs:
+  telltale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: sivaratrisrinivas/telltale/action@v0.1.0
+        with:
+          model-repo: Srini410/telltale

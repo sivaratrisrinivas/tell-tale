@@ -1,0 +1,18 @@
+# $ per 1M tokens at the cheapest listed provider, checked 26 Nov 2026 (spec table).
+# RE-CHECK at https://huggingface.co/inference/models before spending.
+# The ledger multiplies real response.usage by these numbers.
+checked_on: 2026-11-26
+prices:
+  openai/gpt-oss-20b:                                 {provider: coreweave,      in: 0.03, out: 0.13}
+  deepseek-ai/DeepSeek-V4.1-Flash:                    {provider: deepinfra,      in: 0.14, out: 0.42}
+  zai-org/GLM-5.3-Flash:                              {provider: deepinfra,      in: 0.09, out: 0.30}
+  google/gemma-4-26B-A4B-it:                          {provider: primeintellect, in: 0.08, out: 0.29}
+  openai/gpt-oss-120b:                                {provider: coreweave,      in: 0.03, out: 0.17}
+  MiniMaxAI/MiniMax-M3.1-Flash:                       {provider: fireworks-ai,   in: 0.15, out: 0.60}
+  Qwen/Qwen3.8-27B:                                   {provider: deepinfra,      in: 0.15, out: 1.88}
+  thinkingmachines/Inkling-2-Mini:                    {provider: deepinfra,      in: 0.08, out: 0.30}
+  nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16:  {provider: deepinfra,      in: 0.06, out: 0.16}
+  meta-llama/Llama-3.3-70B-Instruct:                  {provider: deepinfra,      in: 0.10, out: 0.32}
+  tencent/Hy4-flash:                                  {provider: fireworks-ai,   in: 0.07, out: 0.28}
+  moonshotai/Kimi-K3:                                 {provider: digitalocean,   in: 2.55, out: 12.95}
+  mistralai/Mistral-Large-4-1T-A52B:                  {provider: mistral,        in: 0.70, out: 2.10}
