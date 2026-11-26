@@ -31,7 +31,7 @@ pre-2022 GitHub text ─► topic (gpt-oss-20b) ─► mirrors from 10 families 
 
 ## Setup
 
-Step-by-step for the paid pilot (M0-M2): see **[PILOT_GUIDE.md](PILOT_GUIDE.md)**.
+Step-by-step guides: **[PILOT_GUIDE.md](PILOT_GUIDE.md)** (M0-M2) and **[TRAINING_GUIDE.md](TRAINING_GUIDE.md)** (dataset push + Kaggle training).
 
 ```bash
 git clone https://github.com/sivaratrisrinivas/tell-tale.git && cd tell-tale

@@ -65,8 +65,12 @@ class _Base:
 
 
 class TorchScorer(_Base):
-    def __init__(self, model_dir: str | Path, device: str = "cpu"):
+    def __init__(self, model_dir: str | Path, device: str | None = None):
+        import torch
+
         from .train.model import load
+
+        device = device or ("cuda" if torch.cuda.is_available() else "cpu")  # GPU on Kaggle: mining 100K is ~30 min
 
         self.model, self.tok, self.meta = load(model_dir, device)
         self.device = device
