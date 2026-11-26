@@ -28,8 +28,10 @@ Each item: what the spec said, what was built, how to change it.
 - **Split sizes.** Core 10,000 → 8,000/1,000/1,000 stratified by repo+kind; vuejs/core: 500 items (T4);
   AI-polished sources: a separate 500 held-out items (not taken from the core test set, so T1 stays clean);
   pool: 100,000. Mirrors inherit their source item's split so a topic never crosses splits.
-- **Mistral (T3) mirrors**: 800 extra mirrors written for core-test items, so T2 keeps all 1,000 seen-family
-  test mirrors. Total mirrors ≈ 10,000 core + 500 vuejs + 800 Mistral. `telltale mirrors estimate` prints the cost.
+- **Mistral (T3) mirrors**: 300 extra mirrors written for core-test items (owner cut it from 800 on 26 Nov after the
+  second pilot: Mistral still reasons and only ~61% of its mirrors pass the filters, so expect ~180-250 usable T3
+  mirrors; enough for a TPR estimate within about ±5 points). T2 keeps all 1,000 seen-family test mirrors.
+  Total mirrors ≈ 10,000 core + 500 vuejs + 300 Mistral. `telltale mirrors estimate` prints the cost.
 - **T6 candidates.** In open-github-issues the `comments` table is populated only for mdn/content and vuejs/core
   among the six repos, so the keyword search over comments mostly finds candidates there; AI-related labels from
   `timeline_events` are also used. Only comments by OWNER/MEMBER/COLLABORATOR count. The arXiv study's data
@@ -67,15 +69,15 @@ Reviewed each Hub `LICENSE` on 26 Nov 2026 (spec rule: drop a model whose terms 
   3. A mirror cut off by `finish_reason: length` retries once with double the budget instead of the same budget.
   4. Inline `<think>…</think>` blocks are stripped from every response.
   5. The pilot and `mirrors estimate --from-pilot` now project v0 cost from the **measured cost per accepted
-     mirror** for each family, times the real v0 mix (Kimi 300, Mistral 800, ~1,130 for the rest). The old
+     mirror** for each family, times the real v0 mix (Kimi 300, Mistral 300, ~1,130 for the rest). The old
      extrapolation multiplied the pilot's per-call average by 10,000, which ignored rejects and the v0 mix.
   Expected v0 cost: about **$4.50** if thinking turns off everywhere; about **$20** if it stays on for all eight
   (Kimi ~$7.80, Qwen ~$4.20, Mistral ~$3.40 of that).
 - **If Kimi or Qwen still reason after the probe, disable them** (`enabled: false` in `configs/models.yaml`).
   That takes v0 back to roughly $8.50–9. Their mirrors are spread over the other families, and Head B drops to 9
   or 8 classes. Head B's size comes from config, so nothing else changes. T7 then reports attribution over the
-  remaining families only. Mistral can't be dropped without losing T3; if it still reasons, cut
-  `sizes.mistral_mirrors` in `configs/data.yaml` from 800 to 400 (about $1.70 instead of $3.40).
+  remaining families only. Mistral can't be dropped without losing T3, so it was cut instead: `sizes.mistral_mirrors` is now 300
+  (second pilot, 26 Nov: 186/200 accepted overall; Mistral and MiniMax still reason).
 - `{n_words}` = source body word count rounded to 10 (min 30), so mirrors are length-matched.
 - A rejected mirror (refusal, empty, outside 0.5–2× source length, >10% shared 8-grams) gets one retry with a
   new temperature; if that also fails it's kept in the JSONL with its `reject` reason and excluded from training.

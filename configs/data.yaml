@@ -11,7 +11,7 @@ sizes:
   pool: 100000                # hard-negative pool: scored, never mirrored up front
   heldout_repo: 500           # vuejs/core items for T4 (each gets one mirror)
   polished: 500               # held-out human items for T5 (AI-polished)
-  mistral_mirrors: 800        # T3 mirrors, written for core-test items
+  mistral_mirrors: 300        # T3 mirrors, written for core-test items (cut from 800 on 26 Nov: Mistral still reasons, ~61% accept)
 bot_patterns:
   - '\[bot\]$'
   - '^dependabot'

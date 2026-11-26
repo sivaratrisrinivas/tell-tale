@@ -112,3 +112,16 @@ def test_calibration_and_threshold():
 
 def test_compose():
     assert compose("Title: X", "a\r\nb") == "X\n\na\nb"
+
+
+def test_v0_plan_uses_configured_mistral_count():
+    from telltale.config import load_yaml
+    from telltale.mirrors.generate import plan_v0
+
+    cfg = load_yaml("data.yaml")
+    assert cfg["sizes"]["mistral_mirrors"] == 300
+    human = pd.DataFrame({"id": [f"r#{i}" for i in range(2000)],
+                          "split": ["test"] * 1000 + ["train"] * 1000})
+    plan = plan_v0(human, load_models(thinking=None), cfg)
+    assert len(plan["heldout"]) == 300 and set(plan["heldout"].values()) == {"mistral"}
+    assert len(plan["seen"]) == 2000
