@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import random
+import re
 import time
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -48,6 +49,22 @@ def _retryable(exc: Exception) -> bool:
     return name in {"APIConnectionError", "APITimeoutError", "Timeout", "ConnectionError"}
 
 
+_THINK = re.compile(r"<think(?:ing)?>.*?(?:</think(?:ing)?>|$)", re.S | re.I)
+
+
+def strip_thinking(text: str) -> str:
+    """Some providers return reasoning inline as <think>...</think>; it must never reach a mirror."""
+    return _THINK.sub("", text or "").strip()
+
+
+def _reasoning_text(message: Any) -> str:
+    for attr in ("reasoning_content", "reasoning"):
+        v = getattr(message, attr, None)
+        if isinstance(v, str) and v:
+            return v
+    return ""
+
+
 def _usage_from(resp: Any) -> Usage:
     u = getattr(resp, "usage", None)
     if u is None:
@@ -66,15 +83,20 @@ class RouterClient:
         self.max_retries = max_retries
 
     def chat(self, spec: ModelSpec, prompt: str, *, max_tokens: int, temperature: float | None = None,
-             purpose: str = "mirror", meta: dict[str, Any] | None = None) -> ChatResult:
+             purpose: str = "mirror", meta: dict[str, Any] | None = None,
+             thinking: dict[str, Any] | None = None) -> ChatResult:
+        """`thinking` overrides the family's thinking-off settings (used by `telltale mirrors probe`)."""
+        t = spec.thinking() if thinking is None else thinking
+        if t.get("prompt_suffix"):
+            prompt = prompt + t["prompt_suffix"]
         messages = [{"role": "user", "content": prompt}]
         params: dict[str, Any] = {"max_tokens": max_tokens}
         if temperature is not None:
             params["temperature"] = round(float(temperature), 3)
-        if spec.reasoning_effort:
-            params["reasoning_effort"] = spec.reasoning_effort
-        if spec.extra_body:
-            params["extra_body"] = spec.extra_body
+        if t.get("reasoning_effort"):
+            params["reasoning_effort"] = t["reasoning_effort"]
+        if t.get("extra_body"):
+            params["extra_body"] = t["extra_body"]
 
         key = self.cache.key(spec.route, messages, params)
         hit = self.cache.get(key)
@@ -102,8 +124,13 @@ class RouterClient:
                 delay = min(delay * 2, 60)
 
         choice = resp.choices[0]
-        text = (choice.message.content or "").strip()
+        raw = choice.message.content or ""
+        text = strip_thinking(raw)
         usage = _usage_from(resp)
+        if not usage.reasoning_tokens:
+            # provider did not report reasoning tokens: estimate from returned reasoning text (~4 chars/token)
+            hidden = _reasoning_text(choice.message) + raw[: max(0, len(raw) - len(text))]
+            usage.reasoning_tokens = len(hidden) // 4
         cost = self.ledger.charge(model=spec.model, provider=spec.provider, usage=usage,
                                   price_in=spec.price_in, price_out=spec.price_out, purpose=purpose, meta=meta)
         self.cache.put(key, {"text": text, "usage": usage.__dict__, "cost_usd": cost,

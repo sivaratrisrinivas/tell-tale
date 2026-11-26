@@ -73,24 +73,66 @@ def _load_human():
     return pd.read_parquet(HUMAN)
 
 
-def cmd_estimate(a):
+def _pilot_units():
+    import pandas as pd
+
+    from .mirrors.generate import pilot_unit_costs
+
+    if MIRRORS_PILOT.exists() and MIRRORS_PILOT.stat().st_size:
+        return pilot_unit_costs(pd.read_json(MIRRORS_PILOT, lines=True))
+    return None
+
+
+def _print_plan_cost(units=None):
     from .config import load_models, load_yaml
     from .mirrors.generate import estimate_cost, plan_v0
 
     models, budget, data = load_models(), load_yaml("budget.yaml"), load_yaml("data.yaml")
     plan = plan_v0(_load_human(), models, data)
-    seen = estimate_cost(plan["seen"], models, budget)
-    held = estimate_cost(plan["heldout"], models, budget, n_topics=0)
-    print(json.dumps({"seen": seen, "heldout": held, "total_usd": round(seen["total"] + held["total"], 4),
-                      "cap_usd": budget["cap_usd"]}, indent=2))
+    seen = estimate_cost(plan["seen"], models, budget, unit_costs=units)
+    held = estimate_cost(plan["heldout"], models, budget, n_topics=0, unit_costs=units)
+    total = round(seen["total"] + held["total"], 2)
+    rows = sorted({**seen["mirrors"], **held["mirrors"]}.items(), key=lambda kv: -kv[1]["usd"])
+    print("\nv0 plan cost (" + ("measured in pilot" if units else "token guesses, assumes thinking off") + "):")
+    for fam, v in rows:
+        acc = f"  accept {units[fam]['accept_rate']:.0%}" if units and fam in units else ""
+        print(f"  {fam:10s} {v['n']:>6} mirrors  ${v['usd']:>7.2f}  [{v['source']}]{acc}")
+    print(f"  topics                      ${seen['topics']:>7.2f}")
+    print(f"  TOTAL v0                    ${total:>7.2f}   (cap ${budget['cap_usd']:.2f})")
+    if total > budget["cap_usd"]:
+        print("  !! over the cap. Run `telltale mirrors probe`, then re-run the pilot; or disable the costliest "
+              "families in configs/models.yaml.")
+    bad = [f for f, u in (units or {}).items() if u["accept_rate"] < 0.8]
+    if bad:
+        print(f"  !! low acceptance (<80%): {', '.join(sorted(bad))}. Check `reject` in runs/mirrors/pilot.jsonl.")
+    return total
+
+
+def cmd_estimate(a):
+    _print_plan_cost(_pilot_units() if a.from_pilot else None)
+
+
+def cmd_probe(a):
+    from .config import heldout_families, training_families
+    from .mirrors.generate import MirrorGenerator
+    from .mirrors.probe import run_probe
+
+    g = MirrorGenerator.from_configs()
+    fams = a.families or (training_families(g.models) + heldout_families(g.models))
+    run_probe(g.client, g.models, fams, base_mirror_tokens=g.budget["max_tokens"]["mirror"])
+    print(f"wrote configs/thinking.yaml; ledger total ${g.client.ledger.spent:.4f}. Next: telltale mirrors pilot")
 
 
 def cmd_pilot(a):
-    import pandas as pd
+    import time
 
-    from .mirrors.generate import MirrorGenerator, pilot_sample, review_pairs_md
+    from .mirrors.generate import MirrorGenerator, pilot_sample, review_pairs_md, pilot_unit_costs
 
     human = _load_human()
+    if MIRRORS_PILOT.exists() and MIRRORS_PILOT.stat().st_size and not a.resume:
+        old = MIRRORS_PILOT.with_name(f"pilot.{time.strftime('%Y%m%d-%H%M%S')}.jsonl")
+        MIRRORS_PILOT.rename(old)
+        print(f"previous pilot kept as {old.name}")
     g = MirrorGenerator.from_configs()
     assign = pilot_sample(human, g.models, n=a.n)
     m = g.run(human, assign, MIRRORS_PILOT)
@@ -100,11 +142,13 @@ def cmd_pilot(a):
                                  cost=("cost_usd", "sum"), out_tok=("completion_tokens", "mean"),
                                  reasoning_tok=("reasoning_tokens", "mean"))
     print(by.to_markdown())
-    per = m["cost_usd"].sum() / max(1, len(m))
+    rej = m["reject"].value_counts()
+    if len(rej):
+        print("reject reasons: " + ", ".join(f"{k}={v}" for k, v in rej.items()))
     print(f"\npilot: {len(ok)}/{len(m)} accepted; mirror cost ${m['cost_usd'].sum():.4f}; "
           f"ledger total ${g.client.ledger.spent:.4f}")
-    print(f"extrapolated 10,000 mirrors at pilot mix: ~${per * 10000:.2f} (+ topics). "
-          f"Review runs/mirrors/pilot_review.md before running `telltale mirrors v0`.")
+    _print_plan_cost(pilot_unit_costs(m))
+    print("Review runs/mirrors/pilot_review.md before running `telltale mirrors v0`.")
 
 
 def cmd_v0(a):
@@ -256,8 +300,9 @@ def main(argv=None):
     s = d.add_parser("push", help="push dataset to the Hub (private by default)"); s.add_argument("repo_id"); s.add_argument("--public", action="store_true"); s.set_defaults(f=cmd_push_dataset)
 
     m = sub.add_parser("mirrors").add_subparsers(dest="sub", required=True)
-    s = m.add_parser("estimate"); s.set_defaults(f=cmd_estimate)
-    s = m.add_parser("pilot", help="M2"); s.add_argument("--n", type=int, default=200); s.set_defaults(f=cmd_pilot)
+    s = m.add_parser("estimate"); s.add_argument("--from-pilot", action="store_true", help="use measured pilot costs"); s.set_defaults(f=cmd_estimate)
+    s = m.add_parser("probe", help="find a working thinking-off switch per family (~$0.10)"); s.add_argument("--families", nargs="*"); s.set_defaults(f=cmd_probe)
+    s = m.add_parser("pilot", help="M2"); s.add_argument("--n", type=int, default=200); s.add_argument("--resume", action="store_true", help="continue the current pilot file instead of starting fresh"); s.set_defaults(f=cmd_pilot)
     s = m.add_parser("v0", help="M3"); s.set_defaults(f=cmd_v0)
     s = m.add_parser("polish", help="T5 set"); s.set_defaults(f=cmd_polish)
     s = m.add_parser("hardneg", help="M6 mirrors for a mined round"); s.add_argument("--round", type=int, required=True); s.set_defaults(f=cmd_hardneg_mirrors)

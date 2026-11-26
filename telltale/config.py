@@ -34,6 +34,13 @@ class ModelSpec:
     quota: int | None = None
     extra_body: dict[str, Any] = field(default_factory=dict)
     reasoning_effort: str | None = None
+    prompt_suffix: str = ""               # e.g. " /no_think" for models that take a prompt switch
+    mirror_max_tokens: int | None = None  # per-family override when reasoning can't be turned off
+
+    def thinking(self) -> dict[str, Any]:
+        """The thinking-off settings this family sends (see configs/thinking.yaml)."""
+        return {"reasoning_effort": self.reasoning_effort, "extra_body": self.extra_body,
+                "prompt_suffix": self.prompt_suffix}
 
     @property
     def route(self) -> str:
@@ -41,7 +48,12 @@ class ModelSpec:
         return f"{self.model}:{self.provider}" if self.provider else self.model
 
 
-def load_models(path: str | Path = "models.yaml", prices: str | Path = "prices.yaml") -> dict[str, ModelSpec]:
+THINKING_FILE = CONFIG_DIR / "thinking.yaml"
+
+
+def load_models(path: str | Path = "models.yaml", prices: str | Path = "prices.yaml",
+                thinking: str | Path | None = THINKING_FILE) -> dict[str, ModelSpec]:
+    """Roster + prices, with per-family thinking-off settings from `telltale mirrors probe` applied on top."""
     cfg = load_yaml(path)
     price_tbl = load_yaml(prices).get("prices", {})
     out: dict[str, ModelSpec] = {}
@@ -62,6 +74,14 @@ def load_models(path: str | Path = "models.yaml", prices: str | Path = "prices.y
             extra_body=m.get("extra_body", {}) or {},
             reasoning_effort=m.get("reasoning_effort"),
         )
+    if thinking and Path(thinking).exists():
+        for key, t in (load_yaml(thinking).get("families") or {}).items():
+            if key in out and t.get("params") is not None:
+                p = t["params"]
+                out[key].reasoning_effort = p.get("reasoning_effort")
+                out[key].extra_body = p.get("extra_body") or {}
+                out[key].prompt_suffix = p.get("prompt_suffix") or ""
+                out[key].mirror_max_tokens = t.get("mirror_max_tokens")
     return out
 
 

@@ -10,9 +10,10 @@ max_tokens:
   topic: 300
   mirror: 900
   polish: 1200
+  mirror_ceiling: 4000   # a truncated mirror retries once with 2x budget, never above this
 # Rough per-call token guesses, used only by `telltale mirrors estimate` before spending.
 estimate:
   topic_in: 450
   topic_out: 120     # includes low reasoning
   mirror_in: 180
-  mirror_out: 450    # includes some reasoning overhead
+  mirror_out: 350    # visible answer only; assumes thinking is off (verify with `telltale mirrors probe`)

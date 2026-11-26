@@ -110,11 +110,12 @@ class MirrorGenerator:
         reject: str | None = "empty"
         temp = 0.0
         attempt = 0
+        max_tok = int(spec.mirror_max_tokens or self.budget["max_tokens"]["mirror"])
         for attempt in range(1, max_attempts + 1):
             temp = round(rng.uniform(0.6, 1.0), 3)
             prompt = mirror_prompt(persona=persona, kind=item["kind"], repo=item["repo"], topic=topic,
                                    n_words=n_words, headings=headings)
-            r = self.client.chat(spec, prompt, max_tokens=self.budget["max_tokens"]["mirror"], temperature=temp,
+            r = self.client.chat(spec, prompt, max_tokens=max_tok, temperature=temp,
                                  purpose="mirror", meta={"source_id": item["id"], "family": family,
                                                          "persona": persona, "temperature": temp})
             tot["p"] += r.usage.prompt_tokens
@@ -123,6 +124,10 @@ class MirrorGenerator:
             tot["cost"] += r.cost_usd
             title, body = split_generated(r.text)
             reject = check_mirror(title, body, source_text)
+            if r.finish_reason == "length" and reject is not None:
+                # ran out of tokens (usually hidden reasoning): retrying with the same budget just pays again
+                reject = "truncated"
+                max_tok = min(max_tok * 2, int(self.budget["max_tokens"].get("mirror_ceiling", 4000)))
             if reject is None:
                 break
         return MirrorRow(item["id"], item["repo"], item["kind"], item.get("split", ""), family, spec.model,
@@ -207,18 +212,36 @@ def plan_v0(human: pd.DataFrame, models: dict[str, ModelSpec], data_cfg: dict, s
     return {"seen": seen, "heldout": held}
 
 
-def estimate_cost(assignment: dict[str, str], models: dict[str, ModelSpec], budget: dict, n_topics: int | None = None) -> dict:
+def pilot_unit_costs(pilot: pd.DataFrame) -> dict[str, dict]:
+    """Real cost per ACCEPTED mirror per family, from a pilot run (includes retries and reasoning tokens)."""
+    out = {}
+    for fam, g in pilot.groupby("family"):
+        acc = int(g["reject"].isna().sum())
+        out[fam] = {"n": len(g), "accepted": acc, "accept_rate": acc / len(g),
+                    "usd_per_accepted": (g["cost_usd"].sum() / acc) if acc else float("inf"),
+                    "reasoning_tok": float(g["reasoning_tokens"].mean())}
+    return out
+
+
+def estimate_cost(assignment: dict[str, str], models: dict[str, ModelSpec], budget: dict, n_topics: int | None = None,
+                  unit_costs: dict[str, dict] | None = None) -> dict:
+    """Cost of a plan. With `unit_costs` (from pilot_unit_costs) it uses measured cost per accepted mirror;
+    otherwise the token guesses in budget.yaml (which assume thinking is off)."""
     e = budget["estimate"]
     n_topics = len(assignment) if n_topics is None else n_topics
     t = models["topic"]
     topic_cost = n_topics * (e["topic_in"] * t.price_in + e["topic_out"] * t.price_out) / 1e6
-    by: dict[str, float] = {}
-    for fam in assignment.values():
-        m = models[fam]
-        by[fam] = by.get(fam, 0.0) + (e["mirror_in"] * m.price_in + e["mirror_out"] * m.price_out) / 1e6
     counts = pd.Series(list(assignment.values())).value_counts().to_dict() if assignment else {}
-    return {"topics": round(topic_cost, 4), "mirrors": {k: {"n": counts[k], "usd": round(v, 4)} for k, v in by.items()},
-            "total": round(topic_cost + sum(by.values()), 4)}
+    by: dict[str, dict] = {}
+    for fam, n in counts.items():
+        m = models[fam]
+        if unit_costs and fam in unit_costs:
+            unit, src = unit_costs[fam]["usd_per_accepted"], "pilot"
+        else:
+            unit, src = (e["mirror_in"] * m.price_in + e["mirror_out"] * m.price_out) / 1e6, "guess"
+        by[fam] = {"n": int(n), "usd": round(unit * n, 4), "source": src}
+    return {"topics": round(topic_cost, 4), "mirrors": by,
+            "total": round(topic_cost + sum(v["usd"] for v in by.values()), 4)}
 
 
 def pilot_sample(human: pd.DataFrame, models: dict[str, ModelSpec], n: int = 200, seed: int = 13) -> dict[str, str]:

@@ -51,7 +51,7 @@ everything halts at `cap_usd` (default **$18**, in `configs/budget.yaml`). `tell
 |---|---|---|
 | M0 | `telltale test-call` (one cheap call that logs its cost) | ~$0.00001 |
 | M1 | `telltale data extract` (prints counts by repo, kind and length; writes `runs/data/counts.md`) | free |
-| M2 | `telltale mirrors estimate`, then `telltale mirrors pilot` (200 mirrors across all 11 families, writes `runs/mirrors/pilot_review.md` with 20 pairs to review, and an extrapolated v0 cost) | ~$0.20 |
+| M2 | `telltale mirrors probe` (finds each model's thinking-off switch, ~$0.10), then `telltale mirrors pilot` (200 mirrors across all 11 families, writes `runs/mirrors/pilot_review.md` with 20 pairs to review, and prints the v0 cost from measured per-mirror costs) | ~$0.20 |
 | M3 | `telltale mirrors v0`, then `telltale data push <you>/telltale-data` (private) | ~$7.50 |
 | M4 | `notebooks/kaggle_train.ipynb` (ROUND=0) or `telltale data build && telltale train` | free (Kaggle) |
 | M5 | `telltale eval --model runs/model/v0/best` | free |

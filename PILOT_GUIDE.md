@@ -72,23 +72,30 @@ At the end it prints count tables by split × repo, kind and length. The same ta
 Sanity check: `train` should be about 8,000, `val` and `test` about 1,000 each, `heldout_repo` (vuejs/core) about 500,
 `polish` 500 and `pool` up to 100,000.
 
-## 5. M2: the pilot (about $0.20)
+## 5. M2: the pilot (about $0.30 including the probe)
 
-Get a free estimate of the full v0 run first:
+**First, find the thinking-off switch for each model (about $0.10):**
 ```bash
-telltale mirrors estimate
+telltale mirrors probe
 ```
-`total_usd` should come out at a few dollars. If it says something wildly different, stop and check `configs/prices.yaml`.
+Each family gets one line: `off` (good), `still_reasoning` (it can't be switched off, so it gets a bigger
+token budget), or `no_variant_worked` (the provider rejected every switch). The results go to
+`configs/thinking.yaml`, and the pilot and v0 runs use them automatically.
 
-Then run the pilot:
+Then run the pilot again. If an earlier `pilot.jsonl` exists, it's kept under a timestamped name and the pilot
+starts fresh:
 ```bash
 telltale mirrors pilot
 ```
-This makes 200 mirrors spread across all 11 families (the 10 training families plus Mistral), 8 requests at a time.
-It takes a few minutes. Every call is cached in `runs/cache/`, so if you rerun it, the calls it already made cost nothing.
+This makes 200 mirrors spread across all 11 families (10 training families plus Mistral), 8 at a time.
+It takes a few minutes. Every call is cached in `runs/cache/`.
 
-When it finishes, it prints a table per family showing `n`, `rejected`, `cost`, mean output tokens (`out_tok`) and
-mean `reasoning_tok`. It also prints the total spend and an **extrapolated cost for 10,000 mirrors**.
+When it finishes, it prints a table per family (`n`, `rejected`, `cost`, mean `out_tok`, mean `reasoning_tok`)
+and the reject reasons. Then it prints a **v0 cost table** built from the measured cost per *accepted* mirror,
+times the real v0 mix, with a TOTAL against the $18 cap. If thinking is off everywhere, expect roughly $4–6.
+If it says **over the cap**, read section 6 before doing anything else.
+
+You can redo the cost table any time without spending anything: `telltale mirrors estimate --from-pilot`.
 
 ## 6. What to review before spending more
 
@@ -101,8 +108,11 @@ mean `reasoning_tok`. It also prints the total spend and an **extrapolated cost 
    "thinking off" flag isn't working for it. Its cost goes up, but the ledger still bills it correctly.
 3. **Look at `rejected` per family.** A family that keeps getting rejected for length or refusals needs a look.
    You can read the failed rows in `runs/mirrors/pilot.jsonl` (check the `reject` column).
-4. **Check the extrapolated cost against the budget.** The spec budgets about $7.50 for v0 mirrors. Run
+4. **Check the v0 TOTAL against the budget.** The spec budgets about $7.50 for v0 mirrors. Run
    `telltale ledger` to see real spend broken down by model.
+5. **If a family still reasons and the total is too high:** set `enabled: false` on it in
+   `configs/models.yaml` (Kimi and Qwen are the expensive ones). Then run `telltale mirrors estimate --from-pilot`
+   again; it's free. `docs/DECISIONS.md` explains what that changes.
 
 If it all looks right, the next step is `telltale mirrors v0` (M3). It spends about $7.50 and is still capped at $18.
 Share `pilot_review.md` and the printed table in the thread first if you'd like a second opinion.

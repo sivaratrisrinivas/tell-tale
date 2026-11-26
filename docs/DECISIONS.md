@@ -52,9 +52,30 @@ Reviewed each Hub `LICENSE` on 26 Nov 2026 (spec rule: drop a model whose terms 
 
 - Topic call: gpt-oss-20b, `reasoning_effort: low`, temperature 0.2, `max_tokens` 300. It is cached, so a retry
   or a second (Mistral) mirror of the same item reuses the topic for free.
-- Thinking is turned off with `chat_template_kwargs` for DeepSeek, GLM, Qwen, Nemotron and Kimi. **Verify in
-  the M2 pilot**: it prints mean reasoning tokens per family. If a provider ignores the flag, the ledger still
-  bills it correctly from `response.usage`.
+- **Thinking off (changed after the first M2 pilot, 26 Nov).** The first pilot showed 8 of 11 families (deepseek,
+  glm, hy4, inkling, kimi, minimax, qwen, mistral) still spending ~900+ hidden reasoning tokens per call. The
+  `chat_template_kwargs` guesses only worked for Nemotron. With `max_tokens: 900` the reasoning used the whole
+  budget, the visible answer came back empty or cut off, the mirror was rejected (96/200 accepted), and the retry
+  paid again. Measured v0 cost at that point: ~$24, over the cap.
+  Fixes:
+  1. `telltale mirrors probe` tries 8 known switches per family (`reasoning_effort: none`, two
+     `chat_template_kwargs` spellings, `thinking: {type: disabled}`, `reasoning: {enabled: false}`,
+     `reasoning_effort: low`, a `/no_think` prompt suffix) on one short prompt, keeps the first that brings
+     reasoning under 50 tokens, and writes `configs/thinking.yaml`, which overrides `models.yaml`. About $0.10.
+  2. If no switch works for a family, the probe gives it a bigger `mirror_max_tokens` (900 + 1.5-2× its
+     reasoning, max 4,000) so it pays once instead of twice.
+  3. A mirror cut off by `finish_reason: length` retries once with double the budget instead of the same budget.
+  4. Inline `<think>…</think>` blocks are stripped from every response.
+  5. The pilot and `mirrors estimate --from-pilot` now project v0 cost from the **measured cost per accepted
+     mirror** for each family, times the real v0 mix (Kimi 300, Mistral 800, ~1,130 for the rest). The old
+     extrapolation multiplied the pilot's per-call average by 10,000, which ignored rejects and the v0 mix.
+  Expected v0 cost: about **$4.50** if thinking turns off everywhere; about **$20** if it stays on for all eight
+  (Kimi ~$7.80, Qwen ~$4.20, Mistral ~$3.40 of that).
+- **If Kimi or Qwen still reason after the probe, disable them** (`enabled: false` in `configs/models.yaml`).
+  That takes v0 back to roughly $8.50–9. Their mirrors are spread over the other families, and Head B drops to 9
+  or 8 classes. Head B's size comes from config, so nothing else changes. T7 then reports attribution over the
+  remaining families only. Mistral can't be dropped without losing T3; if it still reasons, cut
+  `sizes.mistral_mirrors` in `configs/data.yaml` from 800 to 400 (about $1.70 instead of $3.40).
 - `{n_words}` = source body word count rounded to 10 (min 30), so mirrors are length-matched.
 - A rejected mirror (refusal, empty, outside 0.5–2× source length, >10% shared 8-grams) gets one retry with a
   new temperature; if that also fails it's kept in the JSONL with its `reject` reason and excluded from training.
