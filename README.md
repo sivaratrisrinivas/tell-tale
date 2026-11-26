@@ -34,7 +34,7 @@ pre-2022 GitHub text ─► topic (gpt-oss-20b) ─► mirrors from 10 families 
 Step-by-step for the paid pilot (M0-M2): see **[PILOT_GUIDE.md](PILOT_GUIDE.md)**.
 
 ```bash
-git clone https://github.com/sivaratrisrinivas/telltale.git && cd telltale
+git clone https://github.com/sivaratrisrinivas/tell-tale.git && cd tell-tale
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .              # data + mirror generation only (M0-M3), no torch
 pip install -e ".[dev,space]" # + training, ONNX, tests, Space
@@ -75,7 +75,7 @@ jobs:
   telltale:
     runs-on: ubuntu-latest
     steps:
-      - uses: sivaratrisrinivas/telltale/action@v0.1.0
+      - uses: sivaratrisrinivas/tell-tale/action@v0.1.0
         with: {model-repo: Srini410/telltale}
 ```
 

@@ -15,13 +15,13 @@ to your repos. Copy the token, which starts with `hf_`.
 ## 2. Clone and install
 
 ```bash
-git clone https://github.com/sivaratrisrinivas/telltale.git
+git clone https://github.com/sivaratrisrinivas/tell-tale.git
 ```
-(No git? Download `telltale.zip` from the project files and unzip it instead. You get the same `telltale/` folder.)
+(No git? Download `telltale.zip` from the project files and unzip it instead; then use `cd telltale` below.)
 
 **macOS / Linux**
 ```bash
-cd telltale
+cd tell-tale
 python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
@@ -31,7 +31,7 @@ export HF_TOKEN=hf_your_token_here
 
 **Windows (PowerShell)**
 ```powershell
-cd telltale
+cd tell-tale
 py -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
@@ -41,7 +41,7 @@ $env:HF_TOKEN = "hf_your_token_here"
 
 Check that it installed with `telltale --help`. You should see `test-call`, `ledger`, `data`, `mirrors`, `train`, and so on.
 
-Run every command below **from inside the `telltale/` folder**. Outputs go to `telltale/runs/`.
+Run every command below **from inside the `tell-tale/` folder**. Outputs go to `runs/` there.
 
 ## 3. M0: one test call (costs a tiny fraction of a cent)
 

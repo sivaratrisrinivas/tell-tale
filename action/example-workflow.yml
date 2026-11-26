@@ -16,6 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: sivaratrisrinivas/telltale/action@v0.1.0
+      - uses: sivaratrisrinivas/tell-tale/action@v0.1.0
         with:
           model-repo: Srini410/telltale
