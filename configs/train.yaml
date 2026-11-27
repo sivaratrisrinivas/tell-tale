@@ -3,8 +3,9 @@ max_length: 1024
 lr: 3.0e-5
 warmup_ratio: 0.06
 weight_decay: 0.01
-per_device_batch_size: 16
-grad_accum: 2                # effective batch 32
+per_device_batch_size: 8    # auto-halved (with accum doubled) if a full 1,024-token batch doesn't fit
+grad_accum: 4                # effective batch 32
+gradient_checkpointing: true # trades ~30% speed for a large memory cut; needed on a 15 GB T4
 epochs: 3
 fp16: true                   # T4 has no bf16
 seed: 13

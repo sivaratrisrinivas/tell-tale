@@ -125,3 +125,26 @@ def test_v0_plan_uses_configured_mistral_count():
     plan = plan_v0(human, load_models(thinking=None), cfg)
     assert len(plan["heldout"]) == 300 and set(plan["heldout"].values()) == {"mistral"}
     assert len(plan["seen"]) == 2000
+
+
+def test_fit_batch_size_halves_until_it_fits(monkeypatch):
+    import telltale.train.train as T
+
+    fits = {16: False, 8: False, 4: True}
+    monkeypatch.setattr(T, "_step_fits", lambda m, bs, *a: fits[bs])
+    monkeypatch.setattr(T.torch.cuda, "max_memory_allocated", lambda: 0)
+    assert T.fit_batch_size(None, 16, 2, 1024, 100, "cuda", True) == (4, 8)   # effective batch stays 32
+    assert T.fit_batch_size(None, 16, 2, 1024, 100, "cpu", False) == (16, 2)
+
+
+def test_length_grouped_batches_cover_everything_once():
+    from telltale.train.train import LengthGroupedBatches
+
+    lengths = [int(x) for x in np.random.default_rng(0).integers(10, 5000, 1003)]
+    s = LengthGroupedBatches(lengths, 8, seed=1)
+    batches = list(s)
+    flat = sorted(i for b in batches for i in b)
+    assert flat == list(range(1003)) and len(batches) == len(s)
+    spread = np.mean([max(lengths[i] for i in b) - min(lengths[i] for i in b) for b in batches])
+    assert spread < 500          # similar lengths grouped together -> little padding
+    assert list(s) != batches    # reshuffled each epoch

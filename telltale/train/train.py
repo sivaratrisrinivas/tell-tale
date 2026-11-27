@@ -1,6 +1,11 @@
 """Training loop (M4 / M6). Runs on Kaggle's free T4/P100, or CPU for smoke tests."""
 from __future__ import annotations
 
+import os
+
+# Must be set before the first CUDA allocation: reduces fragmentation OOMs on 15 GB T4s.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
 import json
 import math
 import random
@@ -37,6 +42,60 @@ class TextDS(Dataset):
 
     def __getitem__(self, i: int) -> tuple[str, int, int]:
         return self.text[i], self.label[i], self.family[i]
+
+
+class LengthGroupedBatches(torch.utils.data.Sampler):
+    """Shuffled batches of similar-length texts: far less padding, so faster and smaller peaks.
+
+    Each epoch: shuffle, cut into chunks of `bs * 50`, sort each chunk by length, batch, shuffle batches.
+    """
+
+    def __init__(self, lengths: list[int], bs: int, seed: int):
+        self.lengths, self.bs, self.seed, self.epoch = lengths, bs, seed, 0
+
+    def __iter__(self):
+        rng = np.random.default_rng(self.seed + self.epoch)
+        self.epoch += 1
+        idx = rng.permutation(len(self.lengths))
+        chunk = self.bs * 50
+        batches = []
+        for i in range(0, len(idx), chunk):
+            c = sorted(idx[i:i + chunk], key=lambda j: self.lengths[j])
+            batches += [c[k:k + self.bs] for k in range(0, len(c), self.bs)]
+        for b in rng.permutation(len(batches)):
+            yield [int(j) for j in batches[b]]
+
+    def __len__(self) -> int:
+        return math.ceil(len(self.lengths) / self.bs)
+
+
+def _step_fits(model, bs: int, max_len: int, vocab: int, device: str, use_amp: bool) -> bool:
+    """One forward+backward on a worst-case batch (bs x max_len). False on CUDA OOM."""
+    try:
+        ids = torch.randint(5, max(6, vocab - 1), (bs, max_len), device=device)
+        mask = torch.ones_like(ids)
+        with torch.autocast("cuda", dtype=torch.float16, enabled=use_amp):
+            a, b = model(ids, mask)
+        (a.float().sum() + b.float().sum()).backward()
+        return True
+    except torch.OutOfMemoryError:
+        return False
+    finally:
+        model.zero_grad(set_to_none=True)
+        if device.startswith("cuda"):
+            torch.cuda.empty_cache()
+
+
+def fit_batch_size(model, bs: int, accum: int, max_len: int, vocab: int, device: str, use_amp: bool) -> tuple[int, int]:
+    """Halve the per-step batch (doubling accumulation, same effective batch) until a full-length step fits."""
+    if not device.startswith("cuda"):
+        return bs, accum
+    while bs > 1 and not _step_fits(model, bs, max_len, vocab, device, use_amp):
+        print(f"  batch {bs} x {max_len} tokens does not fit in GPU memory; trying {bs // 2} (accum {accum * 2})")
+        bs, accum = bs // 2, accum * 2
+    peak = torch.cuda.max_memory_allocated() / 2**30
+    print(f"per-step batch {bs}, grad accum {accum} (effective {bs * accum}); peak {peak:.1f} GiB in the fit test")
+    return bs, accum
 
 
 def make_collate(tokenizer, max_length: int):
@@ -90,9 +149,16 @@ def train(table: pd.DataFrame, families: list[str], cfg: dict[str, Any], out_dir
 
     tok = AutoTokenizer.from_pretrained(base)
     model = build(base, len(families), **(enc_kwargs or {})).to(device)
-    bs, accum = cfg["per_device_batch_size"], cfg["grad_accum"]
-    dl = DataLoader(TextDS(tr), batch_size=bs, shuffle=True, collate_fn=make_collate(tok, max_len),
-                    generator=torch.Generator().manual_seed(cfg["seed"]))
+    if cfg.get("gradient_checkpointing") and device.startswith("cuda"):
+        model.encoder.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        print("gradient checkpointing on")
+    use_amp = bool(cfg.get("fp16")) and device.startswith("cuda")
+    model.train()
+    bs, accum = fit_batch_size(model, cfg["per_device_batch_size"], cfg["grad_accum"], max_len,
+                               model.encoder.config.vocab_size, device, use_amp)
+    lengths = [len(t) for t in tr["text"]]          # characters: a cheap proxy for token count
+    dl = DataLoader(TextDS(tr), batch_sampler=LengthGroupedBatches(lengths, bs, cfg["seed"]),
+                    collate_fn=make_collate(tok, max_len))
     steps_per_epoch = math.ceil(len(dl) / accum)
     total = steps_per_epoch * cfg["epochs"]
     if max_steps:
@@ -105,7 +171,6 @@ def train(table: pd.DataFrame, families: list[str], cfg: dict[str, Any], out_dir
     ]
     opt = torch.optim.AdamW(groups, lr=cfg["lr"])
     sched = get_linear_schedule_with_warmup(opt, int(cfg["warmup_ratio"] * total), total)
-    use_amp = bool(cfg.get("fp16")) and device.startswith("cuda")
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
     eval_every = max(1, int(steps_per_epoch * cfg.get("eval_every_epochs", 0.5)))
 
@@ -158,6 +223,7 @@ def train(table: pd.DataFrame, families: list[str], cfg: dict[str, Any], out_dir
     p = p_machine(la, T)
     thr = threshold_for_fpr(p[y == 0], cfg["target_fpr"])
     meta.update({"temperature": T, "threshold": thr, "val_auroc": best["auroc"], "best_step": best["step"],
+                 "per_step_batch": bs, "grad_accum": accum,
                  "target_fpr": cfg["target_fpr"], "train_rows": len(tr), "history": history})
     save(model, tok, best_dir, meta)
     (out_dir / "train_log.json").write_text(json.dumps(meta, indent=2, default=float))

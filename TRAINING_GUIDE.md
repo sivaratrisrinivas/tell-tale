@@ -100,6 +100,7 @@ What each cell should show:
 | setup | `Tesla T4` in the nvidia-smi line |
 | pull data | a list of files under `runs/` (human.parquet, v0.jsonl, heldout.jsonl, polished.jsonl…) |
 | build | the same table as step 3 |
+| smoke test (~2 min) | `per-step batch …, grad accum …`, then `best val AUROC …` and a file list. If anything is broken, the run stops here |
 | train | `eval step …: val AUROC 0.9…` lines every half epoch, ending in `best val AUROC … threshold=…` |
 | eval | the T1–T7 table and `v1 acceptance (T1, T2, T5): …` |
 | mine | `round 1: mined 3000` (for the next round; takes ~30 min) |
@@ -107,8 +108,10 @@ What each cell should show:
 
 The report is also saved to your dataset at `raw/reports/round0.md`, so you can read it on the Hub.
 
-**If it fails with `CUDA out of memory`:** in the second cell change `BATCH, ACCUM = 16, 2` to `BATCH, ACCUM = 8, 4`
-and run it again. That's the same effective batch size and uses half the memory.
+**Memory:** training uses fp16, gradient checkpointing and a per-step batch of 8 × 4 accumulation steps. Before
+it starts, it tests a full-length batch and halves it automatically if it doesn't fit, so you shouldn't see
+`CUDA out of memory`. If any command fails, the notebook stops at that cell with `Command failed …`. Scroll up
+from there for the real error, and send it over.
 
 **What "good" looks like for v0:** val AUROC above 0.98, T1 (false positives on real human text) at or under 1%,
 and T2 (catching held-out mirrors) at or above 90%. T3 (Mistral, never seen in training) and T5 (polished human text)
