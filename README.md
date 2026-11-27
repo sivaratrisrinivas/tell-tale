@@ -31,7 +31,7 @@ pre-2022 GitHub text ─► topic (gpt-oss-20b) ─► mirrors from 10 families 
 
 ## Setup
 
-Step-by-step guides: **[PILOT_GUIDE.md](PILOT_GUIDE.md)** (M0-M2) and **[TRAINING_GUIDE.md](TRAINING_GUIDE.md)** (dataset push + Kaggle training).
+Step-by-step guides: **[PILOT_GUIDE.md](PILOT_GUIDE.md)** (M0-M2) and **[TRAINING_GUIDE.md](TRAINING_GUIDE.md)** (dataset push + Kaggle training), **[ROUND1_GUIDE.md](ROUND1_GUIDE.md)** (hard negatives + safer ONNX export).
 
 ```bash
 git clone https://github.com/sivaratrisrinivas/tell-tale.git && cd tell-tale
@@ -55,9 +55,9 @@ everything halts at `cap_usd` (default **$18**, in `configs/budget.yaml`). `tell
 | M3 | `telltale mirrors v0`, then `telltale data push <you>/telltale-data` (private) | ~$7.50 |
 | M4 | `notebooks/kaggle_train.ipynb` (ROUND=0) or `telltale data build && telltale train` | free (Kaggle) |
 | M5 | `telltale eval --model runs/model/v0/best` | free |
-| M6 | `telltale mine --model … --round 1`, `telltale mirrors hardneg --round 1`, `telltale data build --with-hard-negatives`, retrain (repeat up to 3 rounds) | ~$2 per round |
-| M7 | `telltale mirrors polish` (T5), `telltale data realworld`, hand-check `runs/data/t6_candidates.csv`, final `telltale eval` | ~$0.50 |
-| M8 | `telltale export --model … --out runs/onnx` (prints latency + torch/ONNX parity) | free |
+| M6 | `telltale mine --model … --round 1` (or `telltale data pull` after Kaggle), `telltale mirrors hardneg --round 1`, `telltale data build --with-hard-negatives`, retrain (repeat up to 3 rounds) | ~$2 per round |
+| M7 | `telltale mirrors polish` (T5) and `--train 1500` (polished human text for training), `telltale data realworld`, hand-check `runs/data/t6_candidates.csv`, final `telltale eval` | ~$0.50 |
+| M8 | `telltale export --model … --out runs/onnx` (int8 vs fp32 drift check on validation, refits the threshold on the shipped file, prints latency) | free |
 | M9 | add `action/example-workflow.yml` to a sandbox repo | free |
 | M10 | `telltale push-model <you>/telltale`, `space/build_space.sh <you>/telltale` | free |
 

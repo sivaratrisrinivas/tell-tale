@@ -12,6 +12,7 @@ MIRRORS_V0 = RUNS / "mirrors" / "v0.jsonl"
 MIRRORS_HELD = RUNS / "mirrors" / "heldout.jsonl"
 MIRRORS_PILOT = RUNS / "mirrors" / "pilot.jsonl"
 POLISHED = RUNS / "mirrors" / "polished.jsonl"
+POLISHED_TRAIN = RUNS / "mirrors" / "polished_train.jsonl"
 TABLE = RUNS / "table.parquet"
 
 
@@ -169,9 +170,14 @@ def cmd_polish(a):
 
     human = _load_human()
     g = MirrorGenerator.from_configs()
-    items = human[human["split"] == "polish"]
-    g.polish(items, load_yaml("models.yaml")["polishers"], POLISHED)
-    print(f"polished {len(items)} -> {POLISHED}; ledger total ${g.client.ledger.spent:.4f}")
+    if a.train:
+        # training copies (human label) from the train split, never the T5 items
+        items = human[human["split"] == "train"].sample(a.train, random_state=7)
+        out = POLISHED_TRAIN
+    else:
+        items, out = human[human["split"] == "polish"], POLISHED
+    g.polish(items, load_yaml("models.yaml")["polishers"], out)
+    print(f"polished {len(items)} -> {out}; ledger total ${g.client.ledger.spent:.4f}")
 
 
 def cmd_hardneg_mirrors(a):
@@ -191,16 +197,37 @@ def cmd_hardneg_mirrors(a):
 
 # -- dataset ----------------------------------------------------------------------------
 def cmd_build(a):
+    import pandas as pd
+
     from .train.dataset import build_table, guard_no_test_leak, load_mirrors
     from .train.hard_negatives import all_mined_ids
 
     human = _load_human()
     mirrors = load_mirrors([MIRRORS_V0, MIRRORS_HELD, *_hn_mirror_paths()])
     hn = all_mined_ids(RUNS / "hard_neg") if a.with_hard_negatives else set()
-    table = build_table(human, mirrors, _families(), hn)
+    pol = pd.read_json(POLISHED_TRAIN, lines=True) if POLISHED_TRAIN.exists() and not a.no_polished else None
+    table = build_table(human, mirrors, _families(), hn, pol)
     guard_no_test_leak(table)
     table.to_parquet(TABLE, index=False)
     print(table.groupby(["split", "label"]).size().unstack(fill_value=0).to_markdown())
+    extra = table[table["origin"].isin(["hard_negative", "hard_negative_mirror", "polished_human"])]
+    if len(extra):
+        print("\nadded to train:", extra["origin"].value_counts().to_dict())
+
+
+def cmd_pull(a):
+    """Fetch what the Kaggle notebook pushed back (mined hard-negative ids, reports) into runs/."""
+    import shutil
+
+    from huggingface_hub import snapshot_download
+
+    d = Path(snapshot_download(a.repo_id, repo_type="dataset",
+                               allow_patterns=["raw/hard_neg/*", "raw/reports/*"]))
+    for sub in ("hard_neg", "reports"):
+        src = d / "raw" / sub
+        if src.exists():
+            shutil.copytree(src, RUNS / sub, dirs_exist_ok=True)
+            print(f"{sub}: " + ", ".join(sorted(p.name for p in src.iterdir())))
 
 
 def cmd_push_dataset(a):
@@ -258,12 +285,22 @@ def cmd_eval(a):
 
 # -- M8 ---------------------------------------------------------------------------------
 def cmd_export(a):
+    import pandas as pd
+
     from .export.onnx_export import export, latency, parity
 
-    out = export(a.model, a.out)
-    print(json.dumps(latency(out), indent=2))
-    print(json.dumps(parity(a.model, out, ["Fix typo in README", "This PR adds comprehensive support for "
-                                           "the new feature, improving robustness and maintainability."]), indent=2))
+    va = pd.read_parquet(a.table)
+    va = va[va["split"] == "val"]
+    # every human row (they set the threshold) plus a machine sample, to bound CPU time
+    hum, mac = va[va["label"] == 0], va[va["label"] == 1]
+    va = pd.concat([hum, mac.sample(min(len(mac), a.max_machine), random_state=0)])
+    print(f"checking the export on {len(va)} validation texts ({len(hum)} human) on CPU")
+    rep = export(a.model, a.out, va["text"].tolist(), va["label"].to_numpy(), mode=a.precision)
+    print(json.dumps(rep, indent=2, default=float))
+    print(json.dumps(latency(a.out), indent=2))
+    sample = va["text"].sample(min(len(va), 200), random_state=1).tolist()
+    print("torch (fp32, CPU) vs shipped ONNX on 200 validation texts:")
+    print(json.dumps(parity(a.model, a.out, sample), indent=2))
 
 
 def cmd_push_model(a):
@@ -296,7 +333,8 @@ def main(argv=None):
     d = sub.add_parser("data").add_subparsers(dest="sub", required=True)
     s = d.add_parser("extract", help="M1"); s.add_argument("--local-dir"); s.add_argument("--limit-per-repo", type=int); s.set_defaults(f=cmd_extract)
     s = d.add_parser("realworld", help="T6 candidates"); s.add_argument("--local-dir"); s.add_argument("--since", default="2025-01-01"); s.set_defaults(f=cmd_realworld)
-    s = d.add_parser("build", help="assemble the labeled table"); s.add_argument("--with-hard-negatives", action="store_true"); s.set_defaults(f=cmd_build)
+    s = d.add_parser("build", help="assemble the labeled table"); s.add_argument("--with-hard-negatives", action="store_true"); s.add_argument("--no-polished", action="store_true", help="leave out polished_train.jsonl"); s.set_defaults(f=cmd_build)
+    s = d.add_parser("pull", help="download mined ids + reports the notebook pushed"); s.add_argument("repo_id"); s.set_defaults(f=cmd_pull)
     s = d.add_parser("push", help="push dataset to the Hub (private by default)"); s.add_argument("repo_id"); s.add_argument("--public", action="store_true"); s.set_defaults(f=cmd_push_dataset)
 
     m = sub.add_parser("mirrors").add_subparsers(dest="sub", required=True)
@@ -304,7 +342,7 @@ def main(argv=None):
     s = m.add_parser("probe", help="find a working thinking-off switch per family (~$0.10)"); s.add_argument("--families", nargs="*"); s.set_defaults(f=cmd_probe)
     s = m.add_parser("pilot", help="M2"); s.add_argument("--n", type=int, default=200); s.add_argument("--resume", action="store_true", help="continue the current pilot file instead of starting fresh"); s.set_defaults(f=cmd_pilot)
     s = m.add_parser("v0", help="M3"); s.set_defaults(f=cmd_v0)
-    s = m.add_parser("polish", help="T5 set"); s.set_defaults(f=cmd_polish)
+    s = m.add_parser("polish", help="T5 set, or --train N polished train texts (labeled human)"); s.add_argument("--train", type=int, default=0); s.set_defaults(f=cmd_polish)
     s = m.add_parser("hardneg", help="M6 mirrors for a mined round"); s.add_argument("--round", type=int, required=True); s.set_defaults(f=cmd_hardneg_mirrors)
 
     s = sub.add_parser("train", help="M4/M6")
@@ -319,7 +357,9 @@ def main(argv=None):
     s.add_argument("--realworld", default="runs/data/t6_candidates.csv"); s.add_argument("--latency-onnx"); s.add_argument("--title", default="Telltale evaluation")
     s.set_defaults(f=cmd_eval)
 
-    s = sub.add_parser("export", help="M8"); s.add_argument("--model", required=True); s.add_argument("--out", default="runs/onnx"); s.set_defaults(f=cmd_export)
+    s = sub.add_parser("export", help="M8"); s.add_argument("--model", required=True); s.add_argument("--out", default="runs/onnx")
+    s.add_argument("--table", default=str(TABLE)); s.add_argument("--precision", choices=["auto", "int8", "fp32"], default="auto")
+    s.add_argument("--max-machine", type=int, default=500); s.set_defaults(f=cmd_export)
     s = sub.add_parser("push-model"); s.add_argument("repo_id"); s.add_argument("--onnx-dir", default="runs/onnx"); s.add_argument("--torch-dir"); s.add_argument("--card", default="MODEL_CARD.md"); s.add_argument("--public", action="store_true"); s.set_defaults(f=cmd_push_model)
     s = sub.add_parser("score"); s.add_argument("--model", required=True); s.add_argument("--title", default=""); s.add_argument("--body-file"); s.set_defaults(f=cmd_score)
 

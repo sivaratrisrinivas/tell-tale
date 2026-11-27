@@ -92,7 +92,16 @@ Reviewed each Hub `LICENSE` on 26 Nov 2026 (spec rule: drop a model whose terms 
 - Custom training loop (not HF Trainer) for the masked CE_B and best-AUROC checkpointing.
 - On a T4, if batch 16 × 1,024 tokens runs out of memory, use `--per-device-batch-size 8 --grad-accum 4`
   (same effective batch of 32).
-- Threshold: the smallest value that keeps validation human FPR ≤ `target_fpr` (1%) after temperature scaling.
+- Threshold: the smallest value that keeps validation human FPR ≤ `target_fpr` after temperature scaling.
+  Round 0 used 1% and landed at 1.20% on test (12 of 998: val/test noise at this size). From round 1 the target
+  is 0.75%, which leaves margin under the 1% T1 goal; the eval report prints the T2/T3/T5 cost at 1%, 0.75%, 0.5%.
+- AI-polished human text: 1,500 *train-split* human items get the T5 "fix grammar and spelling only" pass and join
+  training labeled human (`origin = polished_human`). The spec says polished human text must not be flagged; it
+  doesn't forbid training on polished copies of training items. The 500 T5 test items are never trained on.
+- ONNX: int8 quantizes encoder MatMuls only, per channel (heads and embeddings stay fp32). Export compares int8
+  with fp32 on validation and ships fp32 if AUROC drops > 0.001 or > 1% of flags change, then refits temperature
+  and threshold on the shipped file. The file keeps the name `model.int8.onnx` either way so the Action and Space
+  don't change; `telltale_config.json` records `onnx_precision`.
 
 ## Action
 

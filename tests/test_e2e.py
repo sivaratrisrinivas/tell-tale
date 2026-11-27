@@ -117,11 +117,20 @@ def test_pipeline(ws, monkeypatch):
     from telltale.export.onnx_export import export, latency, parity
     from telltale.inference import OnnxScorer
 
-    onnx_dir = export(model_dir, ws / "onnx")
+    onnx_dir = ws / "onnx"
+    va = table[table["split"] == "val"]
+    rep = export(model_dir, onnx_dir, va["text"].tolist(), va["label"].to_numpy())
+    print(rep)
+    assert rep["shipped"] in ("int8", "fp32") and "int8_vs_fp32" in rep
+    meta = json.loads((onnx_dir / "telltale_config.json").read_text())
+    assert meta["threshold"] == rep["threshold"] and meta["onnx_precision"] == rep["shipped"]
+    assert sorted(p.name for p in onnx_dir.glob("*.onnx")) == ["model.int8.onnx"]
+    # fp32 export is exact; the shipped file is scored with its own refit threshold
+    fp = export(model_dir, ws / "onnx32", mode="fp32")
     texts = table[table["split"] == "test"]["text"].head(20).tolist()
-    par = parity(model_dir, onnx_dir, texts)
-    print(par)
-    assert par["flag_agreement"] >= 0.8
+    par = parity(model_dir, ws / "onnx32", texts)
+    print(fp, par)
+    assert par["max_logit_diff"] < 1e-3
     lat = latency(onnx_dir)
     assert lat["load_s"] + lat["score_s_median"] < 30
 

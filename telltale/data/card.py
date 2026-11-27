@@ -67,7 +67,7 @@ def push_dataset(repo_id: str, private: bool = True, runs: str | Path = "runs") 
     human = pd.read_parquet(runs / "data" / "human.parquet")
     human.drop(columns=["author"], errors="ignore").to_parquet(stage / "human.parquet", index=False)
     frames = [pd.read_json(p, lines=True) for p in sorted((runs / "mirrors").glob("*.jsonl"))
-              if p.name != "polished.jsonl" and not p.name.startswith("pilot") and p.stat().st_size]
+              if not p.name.startswith(("polished", "pilot")) and p.stat().st_size]
     if frames:
         pd.concat(frames, ignore_index=True).to_parquet(stage / "mirrors.parquet", index=False)
     pol = runs / "mirrors" / "polished.jsonl"

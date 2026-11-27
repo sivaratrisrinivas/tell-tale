@@ -148,3 +148,28 @@ def test_length_grouped_batches_cover_everything_once():
     spread = np.mean([max(lengths[i] for i in b) - min(lengths[i] for i in b) for b in batches])
     assert spread < 500          # similar lengths grouped together -> little padding
     assert list(s) != batches    # reshuffled each epoch
+
+
+def test_polished_train_rows_only_from_train_split():
+    from telltale.train.dataset import build_table, guard_no_test_leak
+
+    human = pd.DataFrame({"id": ["a", "b", "c"], "split": ["train", "polish", "val"], "title": ["T"] * 3,
+                          "body": ["x y z"] * 3, "repo": ["r"] * 3, "kind": ["pr"] * 3})
+    pol = pd.DataFrame({"source_id": ["a", "b", "c"], "title": ["T"] * 3, "body": ["x y z."] * 3,
+                        "repo": ["r"] * 3, "kind": ["pr"] * 3, "family": ["qwen"] * 3})
+    t = build_table(human, pol.iloc[:0].assign(reject=None), ["qwen"], polished_train=pol)
+    p = t[t["origin"] == "polished_human"]
+    assert list(p["source_id"]) == ["a"] and (p["label"] == 0).all() and (p["split"] == "train").all()
+    guard_no_test_leak(t)
+
+
+def test_operating_points_stricter_threshold_lowers_fpr():
+    from telltale.eval.report import operating_points
+
+    rng = np.random.default_rng(0)
+    def df(n_h, n_m):
+        return pd.DataFrame({"label": [0] * n_h + [1] * n_m,
+                             "p": np.r_[rng.beta(1, 20, n_h), rng.beta(20, 1, n_m)]})
+    op = operating_points(df(1000, 1000), df(1000, 1000), None, df(500, 0))
+    assert list(op["val target FPR"]) == [0.01, 0.0075, 0.005]
+    assert op["threshold"].is_monotonic_increasing and op["T2 TPR"].is_monotonic_decreasing

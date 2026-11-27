@@ -11,4 +11,4 @@ fp16: true                   # T4 has no bf16
 seed: 13
 family_loss_weight: 0.3      # total = CE_A + 0.3 * CE_B (CE_B on machine rows only)
 eval_every_epochs: 0.5
-target_fpr: 0.01             # threshold chosen on calibrated validation scores
+target_fpr: 0.0075           # threshold on calibrated validation scores; under the 1% T1 target to leave room for val/test noise

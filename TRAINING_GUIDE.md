@@ -117,7 +117,7 @@ from there for the real error, and send it over.
 and T2 (catching held-out mirrors) at or above 90%. T3 (Mistral, never seen in training) and T5 (polished human text)
 are the interesting ones. Send the report back whatever the numbers are.
 
-## What's next (not yet)
+## What's next
 
-Hard-negative rounds (M6): the notebook already mined `round1` ids. Mirroring them costs about $1–2 per round on
-your machine, then you retrain with `ROUND = 1`. That gets its own guide once v0 results are in.
+Round 0 done? Follow **[ROUND1_GUIDE.md](ROUND1_GUIDE.md)**: hard negatives, polished human text, a stricter
+threshold, and a safer ONNX export (about $2.10).

@@ -39,9 +39,25 @@ def load_mirrors(paths: list[str | Path]) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=["source_id", "family", "reject"])
 
 
+def polished_rows(polished: pd.DataFrame, human: pd.DataFrame) -> pd.DataFrame:
+    """AI-polished *train-split* human texts ("fix grammar and spelling only"), labeled human.
+
+    Teaches the model that a grammar pass does not make a text machine-written. Only train items are used;
+    the T5 test set (split "polish") is never trained on.
+    """
+    split_of = human.set_index("id")["split"]
+    p = polished[polished["source_id"].map(split_of) == "train"]
+    p = p[p["body"].fillna("").str.strip() != ""]
+    text = [compose(t, b) for t, b in zip(p["title"], p["body"])]
+    return pd.DataFrame({"text": text, "label": 0, "family": -1, "family_name": "", "split": "train",
+                         "source_id": p["source_id"].values, "repo": p["repo"].values, "kind": p["kind"].values,
+                         "n_words": [word_count(t) for t in text], "origin": "polished_human"})
+
+
 def build_table(human: pd.DataFrame, mirrors: pd.DataFrame, families: list[str],
-                hard_negative_ids: set[str] | None = None) -> pd.DataFrame:
-    """train/val/test/heldout_repo rows from the core set; mined pool items (and their mirrors) join `train`."""
+                hard_negative_ids: set[str] | None = None, polished_train: pd.DataFrame | None = None) -> pd.DataFrame:
+    """train/val/test/heldout_repo rows from the core set; mined pool items (and their mirrors) join `train`.
+    Optional AI-polished train-split human texts join `train` as human."""
     h = human.copy()
     hn = set(hard_negative_ids or ())
     if hn:
@@ -54,7 +70,10 @@ def build_table(human: pd.DataFrame, mirrors: pd.DataFrame, families: list[str],
     if hn:
         hr.loc[hr["source_id"].isin(hn), "origin"] = "hard_negative"
         mr.loc[mr["source_id"].isin(hn), "origin"] = "hard_negative_mirror"
-    return pd.concat([hr, mr], ignore_index=True)[COLUMNS]
+    parts = [hr, mr]
+    if polished_train is not None and len(polished_train):
+        parts.append(polished_rows(polished_train, h))
+    return pd.concat(parts, ignore_index=True)[COLUMNS]
 
 
 def guard_no_test_leak(table: pd.DataFrame) -> None:
